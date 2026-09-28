@@ -46,6 +46,9 @@ Write both probes into the addon's SavedVariables so they can be read straight o
   exactly like fresh evidence.
 - To observe the outcome of an early-`return` branch, convert it to a `local flag = true` plus a
   trailing `if (flag) then return end`; behaviour is identical and the result becomes readable.
+- **Do not read another file's file-local from your probe — it is silently nil and reports a false value.** Z-Perl/QueFrame cores declare `local init_done, gradient, conf, doneOptions` (QueFrame_Init.lua) and `local conf` (QueFrame_Globals.lua), so a probe placed in a *different* core file (`QueFrame_Slash.lua`) reading `conf.bar.fat` sees a global that is usually nil and prints "fat=0" while the frames are demonstrably laid out in fat mode. Read the config through the global the config system publishes (`QueFrameDB`, set alongside the file-local), or record the value the code path itself used.
+- **Geometry probe — the cheapest way to end a "this frame's bar is wrong" thread.** One line per unit frame, identical fields in the same order, so a single divergent frame stands out: `outer/name/portrait/stats` dims, then every bar `hp/mp/xp/rep/druid` as `WxH` plus a `(H)` marker when hidden, then a derived verdict `stack=n in WxH leftover=<statsH - sum of shown bar heights> top=<?> bot=<?>` computed as `statsFrame:GetTop() - firstShownBar:GetTop()` and `lastShownBar:GetBottom() - statsFrame:GetBottom()`. pcall every geometry read (`GetWidth`/`GetHeight`/`GetTop`) and classify the result — bar geometry can come back secret/inaccessible, and `floor(secret + 0.5)` throws where `format("%.0f", secret)` does not. This one line answers "where is the empty space", "is it a mode problem or an untouched frame" and "is the percent string really drawn in the space being reserved for it" without a screenshot, and run it on a WORKING sibling frame in the same pass: identical configs plus different geometry is the proof that the fault is a call that never ran, not a parameter.
+- **Symmetric padding is by design, dead space is not.** In Z-Perl fat mode the bar stack always ends 5px above the frame bottom (5px top padding too); `top` and `bot` both reading ~9 with 10px bars in a 40px box means the bars are still at the template geometry (10px bars, 2px gap, no layout), not that the mode is off.
 - Remove probes once the path is confirmed — they write into the user's own saved config.
 
 ## 3. Probe catalogue
@@ -105,7 +108,9 @@ Write both probes into the addon's SavedVariables so they can be read straight o
 2. Is the config table the code actually reads the one you think it is? (global vs per-character,
    saved keys vs default keys)
 3. Did the failing path run at all? (decision probe present vs absent in the save) — absence
-   means an early return upstream, and that is a different fix from "an input is wrong".
+   means an early return upstream, and that is a different fix from "an input is wrong". For
+   anything geometric, the same question is answered by size: a bar still at the template's
+   exact XML size was never laid out by any path.
 4. What does the failing path resolve to at runtime? (decision probe contents)
 5. Only then change code.
 
